@@ -11,13 +11,14 @@ Goals:
 
 Tech stack:
 - C++
-- miniaudio.h to read audio samples from a file
+- ffmpeg to read audio samples **TODO: switch from miniaudio to ffmpeg**
 - stb_image.h to write a png file
 - sqlite to store hashes in a database
 
 Resources:
 - [The original paper](https://www.ee.columbia.edu/~dpwe/papers/Wang03-shazam.pdf)
 - [Very nice explanation of the paper](https://www.cameronmacleod.com/blog/how-does-shazam-work)
+- [SIMD for C++ developers](http://const.me/articles/simd/simd.pdf)
 
 Steps to register a song:
 - **Should we downsample the audio? How many channels do we use?**
