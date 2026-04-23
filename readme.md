@@ -1,5 +1,10 @@
 # Low earth orbit visualizer
 
+Should I just use this: https://github.com/neuromorphicsystems/sgp4/ as the sgp4 propagator and move on with my life?
+How many lines of code would be left for me to actually implement?
+
+Inspiration: https://orbital-watch-pink.vercel.app/
+
 Post on X:
 ```
 I'm back from my silence. I might come back to the chemical visualizer, but
@@ -33,7 +38,7 @@ In C++ with OpenGL, everything from scratch.
 
 ---
 
-- Low earth orbit: Orbit altitude of <= 2 km.
+- Low earth orbit: Orbit altitude of <= 2000 km.
 - Drag: An opposing force exterted by the Earth's atmosphere on objects orbiting in LEO.
 - SGP4: Simplified general pertubations 4
 - TLE: Two-line element set. Although it's the de facto standard, it's very outdated (Y2K problems, running out of satellite identifiers, etc), so instead we'll be parsing CSV
@@ -50,6 +55,7 @@ In C++ with OpenGL, everything from scratch.
 
 ---
 
+- [Collision avoidance](https://advancedssa.com/media/CoordinateFrames-SSAworkshop2018.61f87636.pdf)
 - [Planetary Orbits](https://science.nasa.gov/learn/basics-of-space-flight/chapter5-1/)
 - [Supplemental GP Element Sets](https://celestrak.org/NORAD/elements/supplemental/index.php?FORMAT=csv)
 - [United States Space Command](https://en.wikipedia.org/wiki/United_States_Space_Command)
