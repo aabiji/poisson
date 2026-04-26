@@ -53,6 +53,7 @@ Roadmap:
 ---
 
 - [Creating an icosphere mesh in code](http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html)
+- [Sphere.cpp](https://gist.github.com/Pikachuxxxx/5c4c490a7d7679824e0e18af42918efc)
 - [Planetary Orbits](https://science.nasa.gov/learn/basics-of-space-flight/chapter5-1/)
 - [Supplemental GP Element Sets](https://celestrak.org/NORAD/elements/supplemental/index.php?FORMAT=csv)
 - [United States Space Command](https://en.wikipedia.org/wiki/United_States_Space_Command)
@@ -63,3 +64,4 @@ Roadmap:
 - [Two-line element set](https://en.wikipedia.org/wiki/Two-line_element_sete)
 - [A New Way to Obtain GP Data (aka TLEs)](https://celestrak.org/NORAD/documentation/gp-data-formats.php)
 - [Classical/Keplerian Orbital Elements](https://www.youtube.com/watch?v=AReKBoiph6g)
+- [Introduction to spherical coordinates, Multivariable Calculus](https://www.youtube.com/watch?v=8x_UjFUySRg)

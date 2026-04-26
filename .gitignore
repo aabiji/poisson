@@ -1,7 +1,3 @@
 build
 data
-
-
-# Added by cargo
-
-/target
+.cache

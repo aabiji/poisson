@@ -1,9 +1,10 @@
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/quaternion_transform.hpp"
 #include <assert.h>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <unordered_map>
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -15,10 +16,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+// https://medium.com/@zpm.mehrdad/cube-projection-from-equirectangular-panorama-using-c-03813afa0cd2
 // TODO:
-// - Fix icosphere UV mapping
 // - Tie up some loose ends (resizing, error handling, scale normal by normal
-// matrix, basic phong lighting, etc) and refactor
+//   matrix, basic phong lighting, etc) and refactor
+// - Render instanced spheres
+// - Render a basic skybox
 
 unsigned int load_shader(const char *path, int type) {
   auto size = std::filesystem::file_size(path);
@@ -85,39 +88,29 @@ private:
   unsigned int program;
 };
 
-struct vec3hash {
-  std::size_t operator()(const glm::vec3 &v) const {
-    return std::hash<float>()(v.x) ^ (std::hash<float>()(v.y) << 1) ^
-           (std::hash<float>()(v.z) << 2);
-  }
-};
-
 struct Vertex {
   glm::vec3 position;
   glm::vec2 uv;
   glm::vec3 normal;
-
-  Vertex(glm::vec3 p) : position(p), uv(0.0), normal(0.0) {}
 };
 
-class Mesh {
-public:
+struct Mesh {
+  Mesh() : translation(1.0), scale(1.0), current_rotation(1.0, 0.0, 0.0, 0.0) {}
   ~Mesh();
-  explicit Mesh(std::vector<Vertex> v, std::vector<unsigned int> i);
 
-  void render();
-  void rotate(float dx, float dy);
   glm::mat4 model_matrix();
+  void render();
+  void init_buffers();
+  void rotate(float padx, float pady, float dx, float dy);
 
-private:
   std::vector<Vertex> vertices;
   std::vector<unsigned int> indices;
   unsigned int vao, vbo, ebo;
+  glm::mat4 translation, scale;
   glm::quat current_rotation;
 };
 
-Mesh::Mesh(std::vector<Vertex> v, std::vector<unsigned int> i)
-    : vertices(v), indices(i), current_rotation(1.0, 0.0, 0.0, 0.0) {
+void Mesh::init_buffers() {
   glGenVertexArrays(1, &vao);
   glGenBuffers(1, &vbo);
   glGenBuffers(1, &ebo);
@@ -157,93 +150,65 @@ void Mesh::render() {
 }
 
 glm::mat4 Mesh::model_matrix() {
-  // translation * rotation * scale
-  return glm::mat4(current_rotation);
+  return translation * glm::mat4(current_rotation) * scale;
 }
 
-void Mesh::rotate(float dx, float dy) {
-  float sensitivity = 0.1;
-
+void Mesh::rotate(float padx, float pady, float dx, float dy) {
   glm::vec3 world_up = glm::vec3(0.0, 1.0, 0.0);
   glm::vec3 world_right = current_rotation * glm::vec3(1.0, 0.0, 0.0);
 
-  glm::quat yaw = glm::angleAxis(dx * sensitivity, world_up);
-  glm::quat pitch = glm::angleAxis(dy * sensitivity, world_right);
+  glm::quat yaw = glm::angleAxis(dx * padx, world_up);
+  glm::quat pitch = glm::angleAxis(dy * pady, world_right);
 
   current_rotation = glm::normalize(yaw * pitch * current_rotation);
 }
 
-Mesh generate_unit_sphere(int depth) {
-  std::vector<Vertex> vertices;
-  std::unordered_map<glm::vec3, unsigned int, vec3hash> vertex_map;
+Mesh generate_unit_sphere(int longitudes, int lattitudes) {
+  Mesh mesh;
 
-  auto add_vertex = [&](glm::vec3 v) {
-    v = glm::normalize(v);
-    int index = vertices.size();
-    vertices.push_back(Vertex(v));
-    vertex_map.insert({v, index});
-    return index;
-  };
+  // Add vertices
+  for (int i = 0; i <= lattitudes; i++) {
+    float lattitude_angle =
+        (M_PI / 2.0) - i * (M_PI / (float)lattitudes); // -pi/2 to pi/2
+    float xy = cos(lattitude_angle);
+    float z = sin(lattitude_angle);
 
-  auto midpoint = [&](int p1, int p2) {
-    glm::vec3 v = (vertices[p1].position + vertices[p2].position) / 2.0f;
-    return vertex_map.count(v) ? vertex_map[v] : add_vertex(v);
-  };
+    for (int j = 0; j <= longitudes; j++) {
+      float longitude_angle = j * (2.0 * M_PI / (float)longitudes);
 
-  // Initial icosahedron points
-  double p = (1.0 + std::sqrt(5.0)) / 2.0;
-  std::vector<glm::vec3> initial_vertices = {
-      glm::vec3(-1, p, 0),  glm::vec3(1, p, 0),   glm::vec3(-1, -p, 0),
-      glm::vec3(1, -p, 0),  glm::vec3(0, -1, p),  glm::vec3(0, 1, p),
-      glm::vec3(0, -1, -p), glm::vec3(0, 1, -p),  glm::vec3(p, 0, -1),
-      glm::vec3(p, 0, 1),   glm::vec3(-p, 0, -1), glm::vec3(-p, 0, 1)};
-  for (glm::vec3 v : initial_vertices)
-    add_vertex(v);
+      Vertex v;
+      v.position =
+          glm::vec3(xy * cos(longitude_angle), z, xy * sin(longitude_angle));
+      v.uv = glm::vec2((float)j / (float)longitudes,
+                       1.0 - (float)i / (float)lattitudes);
+      v.normal = v.position;
 
-  // Each triangle is grouped by 3 indices
-  std::vector<unsigned int> indices = {
-      0, 11, 5,  0, 5,  1, 0, 1, 7, 0, 7,  10, 0, 10, 11, 1, 5, 9, 5, 11,
-      4, 11, 10, 2, 10, 7, 6, 7, 1, 8, 3,  9,  4, 3,  4,  2, 3, 2, 6, 3,
-      6, 8,  3,  8, 9,  4, 9, 5, 2, 4, 11, 6,  2, 10, 8,  6, 7, 9, 8, 1};
-
-  // Subdivide the vertices
-  for (int j = 0; j < depth; j++) {
-    std::vector<unsigned int> new_indices;
-
-    for (size_t i = 0; i < indices.size(); i += 3) {
-      int a = midpoint(indices[i], indices[i + 1]);
-      int b = midpoint(indices[i + 1], indices[i + 2]);
-      int c = midpoint(indices[i + 2], indices[i]);
-
-      new_indices.push_back(indices[i]);
-      new_indices.push_back(a);
-      new_indices.push_back(c);
-
-      new_indices.push_back(indices[i + 1]);
-      new_indices.push_back(b);
-      new_indices.push_back(a);
-
-      new_indices.push_back(indices[i + 2]);
-      new_indices.push_back(c);
-      new_indices.push_back(b);
-
-      new_indices.push_back(a);
-      new_indices.push_back(b);
-      new_indices.push_back(c);
+      mesh.vertices.push_back(v);
     }
-
-    indices = new_indices;
   }
 
-  // Spherically project UV coordinates
-  for (size_t i = 0; i < vertices.size(); i++) {
-    glm::vec3 p = vertices[i].position;
-    vertices[i].uv = glm::vec2(0.5 + std::atan2(p.z, p.x) / (2.0 * M_PI),
-                               0.5 - std::asin(p.y) / M_PI);
-    vertices[i].normal = p; // The normal is the position on a unit sphere
+  // Add indices
+  for (int i = 0; i < lattitudes; i++) {
+    int top = i * (longitudes + 1);
+    int bottom = top + longitudes + 1;
+
+    for (int j = 0; j < longitudes; j++, top++, bottom++) {
+      if (i != 0) {
+        mesh.indices.push_back(top);
+        mesh.indices.push_back(bottom);
+        mesh.indices.push_back(top + 1);
+      }
+
+      if (i != (lattitudes - 1)) {
+        mesh.indices.push_back(top + 1);
+        mesh.indices.push_back(bottom);
+        mesh.indices.push_back(bottom + 1);
+      }
+    }
   }
 
-  return Mesh(vertices, indices);
+  mesh.init_buffers();
+  return mesh;
 }
 
 class Camera {
@@ -291,9 +256,10 @@ int main() {
 
   {
     Shader shader("../src/vertex.glsl", "../src/fragment.glsl");
-    Mesh sphere = generate_unit_sphere(3);
+    Mesh sphere = generate_unit_sphere(32, 32);
+    sphere.scale = glm::scale(sphere.scale, glm::vec3(2.0, 2.0, 2.0));
 
-    const char *path = "../data/test.png";
+    const char *path = "../data/8081_earthmap4k.jpg";
     int width = 0, height = 0, channels = 0;
     stbi_set_flip_vertically_on_load(true);
     unsigned char *pixels = stbi_load(path, &width, &height, &channels, 3);
@@ -329,7 +295,7 @@ int main() {
       bool mouse_down =
           glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
       if (mouse_down)
-        sphere.rotate(x - prev_x, prev_y - y);
+        sphere.rotate(0.01, 0.005, x - prev_x, y - prev_y);
       prev_x = x;
       prev_y = y;
 
