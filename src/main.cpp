@@ -1,7 +1,5 @@
-#include "glm/ext/matrix_transform.hpp"
-#include "glm/ext/quaternion_transform.hpp"
+#include <algorithm>
 #include <assert.h>
-#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -16,7 +14,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "mesh.h"
+#include "satellite.h"
+
 // https://medium.com/@zpm.mehrdad/cube-projection-from-equirectangular-panorama-using-c-03813afa0cd2
+// https://mycoordinates.org/tracking-satellite-footprints-on-earth%E2%80%99s-surface/
 // TODO:
 // - Tie up some loose ends (resizing, error handling, scale normal by normal
 //   matrix, basic phong lighting, etc) and refactor
@@ -88,129 +90,6 @@ private:
   unsigned int program;
 };
 
-struct Vertex {
-  glm::vec3 position;
-  glm::vec2 uv;
-  glm::vec3 normal;
-};
-
-struct Mesh {
-  Mesh() : translation(1.0), scale(1.0), current_rotation(1.0, 0.0, 0.0, 0.0) {}
-  ~Mesh();
-
-  glm::mat4 model_matrix();
-  void render();
-  void init_buffers();
-  void rotate(float padx, float pady, float dx, float dy);
-
-  std::vector<Vertex> vertices;
-  std::vector<unsigned int> indices;
-  unsigned int vao, vbo, ebo;
-  glm::mat4 translation, scale;
-  glm::quat current_rotation;
-};
-
-void Mesh::init_buffers() {
-  glGenVertexArrays(1, &vao);
-  glGenBuffers(1, &vbo);
-  glGenBuffers(1, &ebo);
-
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex),
-               vertices.data(), GL_STATIC_DRAW);
-  glBindVertexArray(vao);
-
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int),
-               indices.data(), GL_STATIC_DRAW);
-
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                        (void *)offsetof(Vertex, position));
-  glEnableVertexAttribArray(0);
-
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                        (void *)offsetof(Vertex, uv));
-  glEnableVertexAttribArray(1);
-
-  glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                        (void *)offsetof(Vertex, normal));
-  glEnableVertexAttribArray(2);
-}
-
-Mesh::~Mesh() {
-  glDeleteVertexArrays(1, &vao);
-  glDeleteBuffers(1, &vbo);
-  glDeleteBuffers(1, &ebo);
-}
-
-void Mesh::render() {
-  glBindVertexArray(vao);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-  glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-}
-
-glm::mat4 Mesh::model_matrix() {
-  return translation * glm::mat4(current_rotation) * scale;
-}
-
-void Mesh::rotate(float padx, float pady, float dx, float dy) {
-  glm::vec3 world_up = glm::vec3(0.0, 1.0, 0.0);
-  glm::vec3 world_right = current_rotation * glm::vec3(1.0, 0.0, 0.0);
-
-  glm::quat yaw = glm::angleAxis(dx * padx, world_up);
-  glm::quat pitch = glm::angleAxis(dy * pady, world_right);
-
-  current_rotation = glm::normalize(yaw * pitch * current_rotation);
-}
-
-Mesh generate_unit_sphere(int longitudes, int lattitudes) {
-  Mesh mesh;
-
-  // Add vertices
-  for (int i = 0; i <= lattitudes; i++) {
-    float lattitude_angle =
-        (M_PI / 2.0) - i * (M_PI / (float)lattitudes); // -pi/2 to pi/2
-    float xy = cos(lattitude_angle);
-    float z = sin(lattitude_angle);
-
-    for (int j = 0; j <= longitudes; j++) {
-      float longitude_angle = j * (2.0 * M_PI / (float)longitudes);
-
-      Vertex v;
-      v.position =
-          glm::vec3(xy * cos(longitude_angle), z, xy * sin(longitude_angle));
-      v.uv = glm::vec2((float)j / (float)longitudes,
-                       1.0 - (float)i / (float)lattitudes);
-      v.normal = v.position;
-
-      mesh.vertices.push_back(v);
-    }
-  }
-
-  // Add indices
-  for (int i = 0; i < lattitudes; i++) {
-    int top = i * (longitudes + 1);
-    int bottom = top + longitudes + 1;
-
-    for (int j = 0; j < longitudes; j++, top++, bottom++) {
-      if (i != 0) {
-        mesh.indices.push_back(top);
-        mesh.indices.push_back(bottom);
-        mesh.indices.push_back(top + 1);
-      }
-
-      if (i != (lattitudes - 1)) {
-        mesh.indices.push_back(top + 1);
-        mesh.indices.push_back(bottom);
-        mesh.indices.push_back(bottom + 1);
-      }
-    }
-  }
-
-  mesh.init_buffers();
-  return mesh;
-}
-
 class Camera {
 public:
   explicit Camera(float aspect_ratio) {
@@ -232,8 +111,27 @@ private:
   glm::mat4 projection;
 };
 
+glm::quat rotate(glm::quat rotation, float padx, float pady, float dx,
+                 float dy) {
+  glm::vec3 world_up = glm::vec3(0.0, 1.0, 0.0);
+  glm::vec3 world_right = rotation * glm::vec3(1.0, 0.0, 0.0);
+
+  glm::quat yaw = glm::angleAxis(dx * padx, world_up);
+  glm::quat pitch = glm::angleAxis(dy * pady, world_right);
+
+  return glm::normalize(yaw * pitch * rotation);
+}
+
+glm::mat4 satellite_to_model(Satellite s) {
+  s.propagate(0);
+  glm::mat4 scale = glm::scale(glm::mat4(1.0), glm::vec3(0.01, 0.01, 0.01));
+  // glm::mat4 translate = glm::translate(glm::mat4(0.0), s.position * 0.0001f);
+  glm::mat4 translate =
+      glm::translate(glm::mat4(0.0), glm::vec3(0.0, 0.0, 0.0));
+  return translate * scale;
+}
 int main() {
-  // auto satellites = read_satellite_data("../data/starlink.csv");
+  auto satellites = read_satellite_data("../data/starlink.csv");
 
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -256,8 +154,20 @@ int main() {
 
   {
     Shader shader("../src/vertex.glsl", "../src/fragment.glsl");
-    Mesh sphere = generate_unit_sphere(32, 32);
-    sphere.scale = glm::scale(sphere.scale, glm::vec3(2.0, 2.0, 2.0));
+
+    /*
+    glm::quat globe_rotation = glm::quat(1.0, 0.0, 0.0, 0.0);
+    glm::mat4 globe_scale =
+        glm::scale(glm::mat4(1.0), glm::vec3(2.0, 2.0, 2.0));
+    InstancedMesh globe = generate_unit_sphere(32, 32);
+    globe.model_matrices.push_back(glm::mat4(1.0));
+    */
+
+    InstancedMesh circles = generate_circle_mesh(10);
+    std::transform(satellites.begin(), satellites.end(),
+                   std::back_inserter(circles.model_matrices),
+                   satellite_to_model);
+    std::cout << circles.model_matrices.size() << "\n";
 
     const char *path = "../data/8081_earthmap4k.jpg";
     int width = 0, height = 0, channels = 0;
@@ -290,21 +200,25 @@ int main() {
       if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         camera.move(1);
 
+      /*
       double x, y;
       glfwGetCursorPos(window, &x, &y);
       bool mouse_down =
           glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-      if (mouse_down)
-        sphere.rotate(0.01, 0.005, x - prev_x, y - prev_y);
+      if (mouse_down) {
+        globe_rotation =
+            rotate(globe_rotation, 0.01, 0.005, x - prev_x, y - prev_y);
+        globe.model_matrices[0] = glm::mat4(globe_rotation) * globe_scale;
+      }
       prev_x = x;
       prev_y = y;
+      */
 
       glClearColor(0.0, 0.0, 0.0, 1.0);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
       glm::mat4 p = camera.projection_matrix();
       glm::mat4 v = camera.view_matrix();
-      glm::mat4 model = sphere.model_matrix();
 
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, texture);
@@ -312,8 +226,9 @@ int main() {
       shader.use();
       shader.set_mat4("projection", p);
       shader.set_mat4("view", v);
-      shader.set_mat4("model", model);
-      sphere.render();
+
+      // globe.render();
+      circles.render();
 
       glfwSwapBuffers(window);
       glfwPollEvents();

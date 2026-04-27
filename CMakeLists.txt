@@ -56,6 +56,8 @@ target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
 
 add_executable(${PROJECT_NAME}
     src/main.cpp
+    src/satellite.cpp
+    src/mesh.cpp
 )
 target_link_libraries(${PROJECT_NAME} perturb imgui glm glfw glad stb)
 
