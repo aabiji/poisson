@@ -33,6 +33,40 @@ private:
   glm::mat4 projection;
 };
 
+class Texture {
+public:
+  ~Texture() { glDeleteTextures(1, &id); }
+
+  Texture(const char *path, int obj, int wrap, int unit)
+      : unit(unit), obj(obj) {
+    int width = 0, height = 0, channels = 0;
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char *pixels = stbi_load(path, &width, &height, &channels, 4);
+    if (pixels == nullptr || channels != 4)
+      THROW_ERROR("Failed to load {}", path);
+
+    glGenTextures(1, &id);
+    glBindTexture(obj, id);
+    glTexParameteri(obj, GL_TEXTURE_WRAP_S, wrap);
+    glTexParameteri(obj, GL_TEXTURE_WRAP_T, wrap);
+    glTexParameteri(obj, GL_TEXTURE_WRAP_R, wrap);
+    glTexParameteri(obj, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(obj, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(obj, 0, GL_RGB, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 pixels);
+    glGenerateMipmap(obj);
+    stbi_image_free(pixels);
+  }
+
+  void use() {
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture(obj, id);
+  }
+
+private:
+  unsigned int id, unit, obj;
+};
+
 glm::quat rotate(glm::quat rotation, float padx, float pady, float dx,
                  float dy) {
   glm::vec3 world_up = glm::vec3(0.0, 1.0, 0.0);
@@ -84,7 +118,14 @@ int main() {
   Camera camera(aspect_ratio);
 
   {
-    Shader shader("../data/vertex.glsl", "../data/fragment.glsl");
+    Shader main_shader("../assets/shaders/main_vertex.glsl",
+                       "../assets/shaders/main_fragment.glsl");
+
+    Shader cubemap_shader("../assets/shaders/fragment_vertex.glsl",
+                          "../assets/shaders/cubemap_fragment.glsl");
+
+    Texture earth_texture("../assets/textures/earthmap4k.jpg", GL_TEXTURE_2D,
+                          GL_REPEAT, 0);
 
     InstancedMesh globe = generate_unit_sphere(32, 32);
     globe.init_buffers(1);
@@ -99,24 +140,6 @@ int main() {
 
     std::transform(satellites.begin(), satellites.end(),
                    std::back_inserter(circles.data), satellite_to_model);
-
-    const char *path = "../data/8081_earthmap4k.jpg";
-    int width = 0, height = 0, channels = 0;
-    stbi_set_flip_vertically_on_load(true);
-    unsigned char *pixels = stbi_load(path, &width, &height, &channels, 3);
-    assert(pixels != nullptr && channels == 3);
-
-    unsigned int texture = 0;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
-                 GL_UNSIGNED_BYTE, pixels);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    stbi_image_free(pixels);
 
     double prev_x = 0, prev_y = 0;
     glfwGetCursorPos(window, &prev_x, &prev_y);
@@ -149,26 +172,22 @@ int main() {
       glm::mat4 p = camera.projection_matrix();
       glm::mat4 v = camera.view_matrix();
 
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, texture);
-
-      shader.use();
-      shader.set<glm::mat4>("projection", p);
-      shader.set<glm::mat4>("view", v);
+      main_shader.use();
+      main_shader.set<glm::mat4>("projection", p);
+      main_shader.set<glm::mat4>("view", v);
 
       glEnable(GL_DEPTH_TEST);
-      shader.set<bool>("use_texture", true);
+      earth_texture.use();
+      main_shader.set<bool>("use_texture", true);
       globe.render();
 
       glDisable(GL_DEPTH_TEST);
-      shader.set<bool>("use_texture", false);
+      main_shader.set<bool>("use_texture", false);
       circles.render();
 
       glfwSwapBuffers(window);
       glfwPollEvents();
     }
-
-    glDeleteTextures(1, &texture);
   }
 
   glfwTerminate();

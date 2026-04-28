@@ -1,3 +1,3 @@
 build
-data/*.csv
+assets/*.csv
 .cache

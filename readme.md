@@ -12,7 +12,7 @@ Roadmap:
 
     - Basic space skybox
 
-    - Texture a sphere using a texture of the Earth
+    - [x] Texture a sphere using a texture of the Earth
 
         - Level of detail: Swap out the texture based off of the zoom level
 
