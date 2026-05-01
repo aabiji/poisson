@@ -13,9 +13,10 @@ Camera::Camera() {
   orbit_angle = 3.95841;
 }
 
-void Camera::rotate_orientation(float dx, float dy, float sensitivity) {
-  yaw += dx * sensitivity;
-  pitch = glm::clamp(pitch + dy * sensitivity, -1.0f, 1.5f); // +- 85 degrees
+void Camera::rotate_orientation(glm::vec2 delta, float sensitivity) {
+  yaw += delta.x * sensitivity;
+  pitch =
+      glm::clamp(pitch + delta.y * sensitivity, -1.0f, 1.5f); // +- 85 degrees
 }
 
 void Camera::rotate_position(bool left) {
@@ -32,6 +33,8 @@ void Camera::rotate_position(bool left) {
 void Camera::zoom(bool inwards) {
   orbit_distance =
       glm::clamp(orbit_distance + (inwards ? -1.0 : 1.0), 3.0, 12.0);
+  position.x = orbit_distance * std::cos(orbit_angle);
+  position.z = orbit_distance * std::sin(orbit_angle);
 }
 
 void Camera::move_vertically(bool up) {

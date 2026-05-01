@@ -6,7 +6,7 @@ class Camera {
 public:
   explicit Camera();
 
-  void rotate_orientation(float dx, float dy, float sensitivity);
+  void rotate_orientation(glm::vec2 delta, float sensitivity);
   void rotate_position(bool left);
   void move_vertically(bool up);
   void zoom(bool inwards);

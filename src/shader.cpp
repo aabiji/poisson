@@ -30,7 +30,7 @@ unsigned int load_shader(const char *path, int type) {
   return id;
 }
 
-Shader::Shader(const char *vshader_path, const char *fshader_path) {
+void Shader::init(const char *vshader_path, const char *fshader_path) {
   unsigned int vertex = load_shader(vshader_path, GL_VERTEX_SHADER);
   unsigned int fragment = load_shader(fshader_path, GL_FRAGMENT_SHADER);
 
@@ -67,6 +67,7 @@ template <typename T> void Shader::set(const char *name, T value) {
     glUniformMatrix4fv(glGetUniformLocation(program, name), 1, GL_FALSE,
                        glm::value_ptr(value));
 }
+
 template void Shader::set<glm::vec3>(const char *, glm::vec3);
 template void Shader::set<glm::mat4>(const char *, glm::mat4);
 template void Shader::set<bool>(const char *, bool);

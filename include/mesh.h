@@ -6,7 +6,7 @@
 
 struct Skybox {
   ~Skybox();
-  Skybox();
+  void init();
   void render();
   unsigned int vao, vbo;
 };
@@ -21,17 +21,27 @@ struct Vertex {
 struct InstanceData {
   glm::mat4 model_matrix;
   glm::vec4 color;
+  InstanceData(glm::mat4 m, glm::vec4 c) : model_matrix(m), color(c) {}
 };
 
-struct InstancedMesh {
+class InstancedMesh {
+public:
   ~InstancedMesh();
+  InstancedMesh();
+  explicit InstancedMesh(std::vector<Vertex> vertices,
+                         std::vector<unsigned int> indices);
 
-  void render();
-  void init_buffers();
+  // Only allow moving, not copying
+  InstancedMesh(const InstancedMesh &) = delete;
+  InstancedMesh &operator=(const InstancedMesh &) = delete;
+  InstancedMesh(InstancedMesh &&other) noexcept;
+  InstancedMesh &operator=(InstancedMesh &&other) noexcept;
 
-  std::vector<Vertex> vertices;
-  std::vector<unsigned int> indices;
-  std::vector<InstanceData> data;
+  void render(std::vector<InstanceData> &data);
+
+private:
+  bool initialized;
+  int num_indices, ssbo_size;
   unsigned int vao, vbo, ebo, ssbo;
 };
 

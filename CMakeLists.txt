@@ -61,6 +61,8 @@ add_executable(${PROJECT_NAME}
     src/mesh.cpp
     src/satellite.cpp
     src/shader.cpp
+    src/texture.cpp
+    src/viz.cpp
 )
 target_include_directories(${PROJECT_NAME} PRIVATE include)
 target_link_libraries(${PROJECT_NAME} perturb imgui glm glfw glad stb)

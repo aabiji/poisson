@@ -1,10 +1,14 @@
 #include <cmath>
 #include <glad/glad.h>
 
-#include "debug.h"
 #include "mesh.h"
 
-Skybox::Skybox() {
+Skybox::~Skybox() {
+  glDeleteVertexArrays(1, &vao);
+  glDeleteBuffers(1, &vbo);
+}
+
+void Skybox::init() {
   glm::vec3 cube_positions[] = {
       // +X (right)
       glm::vec3(1, -1, -1), glm::vec3(1, -1, 1), glm::vec3(1, 1, 1),
@@ -41,19 +45,45 @@ Skybox::Skybox() {
   glEnableVertexAttribArray(0);
 }
 
-Skybox::~Skybox() {
-  glDeleteVertexArrays(1, &vao);
-  glDeleteBuffers(1, &vbo);
-}
-
 void Skybox::render() {
   glBindVertexArray(vao);
   glDrawArrays(GL_TRIANGLES, 0, 36);
 }
 
-void InstancedMesh::init_buffers() {
-  if (data.size() == 0)
-    THROW_ERROR("Must provide instance data");
+InstancedMesh::InstancedMesh() : initialized(false) {}
+
+InstancedMesh::InstancedMesh(InstancedMesh &&other) noexcept {
+  *this = std::move(other);
+}
+
+InstancedMesh &InstancedMesh::operator=(InstancedMesh &&other) noexcept {
+  if (this != &other) {
+    if (initialized) {
+      glDeleteVertexArrays(1, &vao);
+      glDeleteBuffers(1, &vbo);
+      glDeleteBuffers(1, &ebo);
+      glDeleteBuffers(1, &ssbo);
+    }
+
+    vao = other.vao;
+    vbo = other.vbo;
+    ebo = other.ebo;
+    ssbo = other.ssbo;
+    num_indices = other.num_indices;
+    ssbo_size = other.ssbo_size;
+    initialized = other.initialized;
+
+    other.initialized = false;
+    other.vao = other.vbo = other.ebo = other.ssbo = 0;
+  }
+  return *this;
+}
+
+InstancedMesh::InstancedMesh(std::vector<Vertex> vertices,
+                             std::vector<unsigned int> indices) {
+  num_indices = indices.size();
+  ssbo_size = sizeof(InstanceData);
+  initialized = true;
 
   glGenVertexArrays(1, &vao);
   glCreateBuffers(1, &vbo);
@@ -61,8 +91,8 @@ void InstancedMesh::init_buffers() {
   glCreateBuffers(1, &ssbo);
 
   glBindVertexArray(vao);
-  glNamedBufferStorage(ssbo, sizeof(InstanceData) * data.size(), nullptr,
-                       GL_DYNAMIC_STORAGE_BIT);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+  glBufferData(GL_SHADER_STORAGE_BUFFER, ssbo_size, nullptr, GL_DYNAMIC_DRAW);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex),
                vertices.data(), GL_STATIC_DRAW);
@@ -91,19 +121,28 @@ InstancedMesh::~InstancedMesh() {
   glDeleteBuffers(1, &ssbo);
 }
 
-void InstancedMesh::render() {
+void InstancedMesh::render(std::vector<InstanceData> &data) {
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
-  glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
-                  data.size() * sizeof(InstanceData), data.data());
+
+  // Resize the SSBO if needed
+  int new_size = data.size() * sizeof(InstanceData);
+  if (new_size > ssbo_size) {
+    glBufferData(GL_SHADER_STORAGE_BUFFER, new_size, data.data(),
+                 GL_DYNAMIC_DRAW);
+    ssbo_size = new_size;
+  } else {
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, ssbo_size, data.data());
+  }
 
   glBindVertexArray(vao);
-  glDrawElementsInstanced(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0,
+  glDrawElementsInstanced(GL_TRIANGLES, num_indices, GL_UNSIGNED_INT, 0,
                           data.size());
 }
 
 InstancedMesh create_unit_sphere(int longitudes, int lattitudes) {
-  InstancedMesh mesh;
+  std::vector<Vertex> vertices;
+  std::vector<unsigned int> indices;
 
   // Add vertices
   for (int i = 0; i <= lattitudes; i++) {
@@ -122,7 +161,7 @@ InstancedMesh create_unit_sphere(int longitudes, int lattitudes) {
                        1.0 - (float)i / (float)lattitudes);
       v.normal = v.position;
 
-      mesh.vertices.push_back(v);
+      vertices.push_back(v);
     }
   }
 
@@ -133,43 +172,44 @@ InstancedMesh create_unit_sphere(int longitudes, int lattitudes) {
 
     for (int j = 0; j < longitudes; j++, top++, bottom++) {
       if (i != 0) {
-        mesh.indices.push_back(top);
-        mesh.indices.push_back(bottom);
-        mesh.indices.push_back(top + 1);
+        indices.push_back(top);
+        indices.push_back(bottom);
+        indices.push_back(top + 1);
       }
 
       if (i != (lattitudes - 1)) {
-        mesh.indices.push_back(top + 1);
-        mesh.indices.push_back(bottom);
-        mesh.indices.push_back(bottom + 1);
+        indices.push_back(top + 1);
+        indices.push_back(bottom);
+        indices.push_back(bottom + 1);
       }
     }
   }
 
-  return mesh;
+  return InstancedMesh(vertices, indices);
 }
 
 InstancedMesh create_circle_mesh(int num_fans) {
-  InstancedMesh mesh;
+  std::vector<Vertex> vertices;
+  std::vector<unsigned int> indices;
 
   Vertex v;
   v.uv = v.normal = glm::vec3(0.0, 0.0, 0.0);
   v.position = glm::vec3(0.0, 0.0, 0.0);
-  mesh.vertices.push_back(v);
+  vertices.push_back(v);
 
   for (int i = 0; i < num_fans; i++) {
     Vertex v;
     float angle = i * ((2.0 * M_PI) / (float)num_fans);
     v.position = glm::vec3(std::cos(angle), std::sin(angle), 0);
     v.uv = v.normal = glm::vec3(0.0, 0.0, 0.0);
-    mesh.vertices.push_back(v);
+    vertices.push_back(v);
   }
 
   for (int i = 1; i <= num_fans; i++) {
-    mesh.indices.push_back(0);
-    mesh.indices.push_back(i);
-    mesh.indices.push_back((i % num_fans) + 1);
+    indices.push_back(0);
+    indices.push_back(i);
+    indices.push_back((i % num_fans) + 1);
   }
 
-  return mesh;
+  return InstancedMesh(vertices, indices);
 }
