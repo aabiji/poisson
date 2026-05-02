@@ -1,23 +1,13 @@
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
 #include <glad/glad.h>
 
-#include "GLFW/glfw3.h"
 #include "debug.h"
 #include "mesh.h"
 #include "viz.h"
 
-// auto satellites = read_satellite_data("../assets/starlink.csv");
-// std::transform(satellites.begin(), satellites.end(),
-//                std::back_inserter(circles.data), satellite_to_model);
-// InstanceData satellite_to_model(Satellite s) {
-//  s.propagate(0);
-//  glm::mat4 scale = glm::scale(glm::mat4(1.0), glm::vec3(0.01, 0.01, 0.01));
-//  glm::mat4 translate = glm::translate(glm::mat4(1.0), s.position * 0.0001f);
-//  InstanceData instance;
-//  instance.model_matrix = translate * scale;
-//  instance.color = glm::vec4(0.0, 1.0, 0.0, 1.0);
-//  return instance;
-//}
-
+// This is done so that GLFW can be terminated after
+// the Visualizer deconstructor is called
 GLFWContext::GLFWContext() { glfwInit(); }
 GLFWContext::~GLFWContext() { glfwTerminate(); }
 
@@ -118,9 +108,16 @@ void Visualizer::init_scene_objects() {
   globe = create_unit_sphere(32, 32);
   skybox.init();
 
+  earth_scale = 2.0;
   globe_instances.push_back(InstanceData(
-      glm::scale(glm::mat4(1.0), glm::vec3(2.0, 2.0, 2.0)), glm::vec4(0.0)));
-  satellite_instances = {}; // TODO!
+      glm::scale(glm::mat4(1.0), glm::vec3(earth_scale)), glm::vec4(0.0)));
+
+  int size = constellation.load_satellite_data("../assets/starlink.csv");
+  circle_instances.resize(size);
+
+  constellation.set_current_time();
+  constellation.propagate(0, earth_scale, circle_instances);
+  constellation_time_step = 1; // Propagate every 1 second
 }
 
 void Visualizer::run() {
@@ -162,10 +159,10 @@ void Visualizer::render_scene() {
   main_shader.set<bool>("use_texture", true);
   globe.render(globe_instances);
 
-  // glDisable(GL_DEPTH_TEST); // For drawing the 2D shapes
-  // main_shader.set<bool>("use_texture", false);
-  // circles.render();
-  // glEnable(GL_DEPTH_TEST);
+  glDisable(GL_DEPTH_TEST); // For drawing the 2D shapes
+  main_shader.set<bool>("use_texture", false);
+  circles.render(circle_instances);
+  glEnable(GL_DEPTH_TEST);
 
   // Render the skybox
   cubemap_shader.use();

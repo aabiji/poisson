@@ -1,21 +1,25 @@
 #pragma once
 
+#include <perturb/perturb.hpp>
 #include <string>
 #include <vector>
 
-#include <glm/glm.hpp>
-#include <perturb/perturb.hpp>
-#include <perturb/tle.hpp>
+#include "mesh.h"
 
 struct Satellite {
   std::string name;
   std::string id;
   perturb::Satellite model;
-  glm::vec3 position; // km
-  glm::vec3 velocity; // km/s
-
-  Satellite(std::string name, std::string id, perturb::TwoLineElement info);
-  void propagate(int minutes_since_epoch);
 };
 
-std::vector<Satellite> read_satellite_data(const char *csv_path);
+class Constellation {
+public:
+  void set_current_time();
+  int load_satellite_data(std::string csv_path);
+  void propagate(double step_seconds, double earth_scale,
+                 std::vector<InstanceData> &instances);
+
+private:
+  perturb::JulianDate date;
+  std::vector<Satellite> satellites;
+};

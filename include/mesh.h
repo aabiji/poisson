@@ -22,6 +22,7 @@ struct InstanceData {
   glm::mat4 model_matrix;
   glm::vec4 color;
   InstanceData(glm::mat4 m, glm::vec4 c) : model_matrix(m), color(c) {}
+  InstanceData() {}
 };
 
 class InstancedMesh {

@@ -1,18 +1,24 @@
 # Low earth orbit visualizer
 
-Inspiration: https://orbital-watch-pink.vercel.app/
+Inspirations:
+- https://orbital-watch-pink.vercel.app/
+- https://www.jack-huston.com/TLE-Satellite-Plotter/
 
+- Write comments explaining everything
 - Add basic phong lighting on the gloe
   - Use the normal map and the specular map textures
-- Render each satellite as a dot:
-  - Map SGP4 TEME coordinates to ISTR coordinates, then to InstanceData
-- Decide whether to use the daymap or the nightmap based off of the simulated time (current user time?)
 - Propagate satellites on a seperate thread
+- Improve circle rendering
+  - Don't render occluded circles
+  - Render the sphere in such a way that there are always fully circular no matter the rotation
+- Decide whether to use the daymap or the nightmap based off of the simulated time (current user time?)
+  Get starting position, then always propagate one timestamp into the future. Then just interpolate the position during the timestamp
 - Click on a satellite to show info on it
 - Trace satellite trajectories using a curved line
 - Basic UI using imgui:
   - List of all the satellites (name, type, description)
   - Filter satellites by type, by producer, etc
+- Issue HTTP requests to pull in new satellite csvs every few hours (maybe during app load to get fresh data?)
 - Zoom in on your GPS position and highlight the swarm of satellites that are overhead
 - Port to WASM, release project
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "satellite.h"
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -44,7 +45,8 @@ private:
   InputState state;
 
   std::vector<InstanceData> globe_instances;
-  std::vector<InstanceData> satellite_instances;
+  std::vector<InstanceData> circle_instances;
+  double earth_scale, constellation_time_step;
 
   Camera camera;
   Shader main_shader;
@@ -54,4 +56,5 @@ private:
   Texture earth_texture;
   InstancedMesh globe;
   InstancedMesh circles;
+  Constellation constellation;
 };

@@ -1,7 +1,15 @@
+#include <chrono>
+#include <cstring>
+#include <ctime>
 #include <fstream>
+#include <glm/glm.hpp>
+#include <perturb/perturb.hpp>
+#include <perturb/tle.hpp>
 
 #include "debug.h"
 #include "satellite.h"
+
+const double DAY_SECONDS = 86400.0;
 
 void handle_error(perturb::Sgp4Error err) {
   std::string msg = "";
@@ -10,12 +18,12 @@ void handle_error(perturb::Sgp4Error err) {
   switch (err) {
     case perturb::Sgp4Error::MEAN_ELEMENTS: msg = "Bad mean elements"; break;
     case perturb::Sgp4Error::MEAN_MOTION: msg = "Bad mean motion"; break;
-    case perturb::Sgp4Error::PERT_ELEMENTS: msg = "Bad pertubation elements"; break;
+    case perturb::Sgp4Error::PERT_ELEMENTS: msg = "Bad perturbation elements"; break;
     case perturb::Sgp4Error::SEMI_LATUS_RECTUM: msg = "Bad semi latus rectum"; break;
     case perturb::Sgp4Error::EPOCH_ELEMENTS_SUB_ORBITAL: msg = "Bad sub orbital epoch elements"; break;
     case perturb::Sgp4Error::DECAYED: msg = "Decayed prediction"; break;
     case perturb::Sgp4Error::INVALID_TLE: msg = "Invalid TLE"; break;
-    default: msg = "Uknown sgp4 error"; break;
+    default: msg = "Unknown sgp4 error"; break;
   };
   // clang-format on
 
@@ -23,54 +31,109 @@ void handle_error(perturb::Sgp4Error err) {
     THROW_ERROR("ERROR: {}", msg);
 }
 
-Satellite::Satellite(std::string name, std::string id,
-                     perturb::TwoLineElement info)
-    : name(name), id(id), model(perturb::Satellite(info)) {
-  handle_error(model.last_error());
-}
-
-void Satellite::propagate(int minutes_since_epoch) {
-  perturb::StateVector s;
-  handle_error(model.propagate_from_epoch(minutes_since_epoch, s));
-  position = glm::vec3(s.position[0], s.position[1], s.position[2]);
-  velocity = glm::vec3(s.velocity[0], s.velocity[1], s.velocity[2]);
-}
-
 double epoch_day_of_year(std::string timestamp) {
   // Parse the ISO8601 string
+  // And, yes this TLE convention is diabolically cursed.
   int year = std::stoi(timestamp.substr(2, 2)); // Last two digits
+  int full_year = year >= 57 ? 1900 + year : 2000 + year;
+
   int month = std::stoi(timestamp.substr(5, 2));
   int day = std::stoi(timestamp.substr(8, 2));
   int hour = std::stoi(timestamp.substr(11, 2));
   int minute = std::stoi(timestamp.substr(14, 2));
   int second = std::stoi(timestamp.substr(17, 2));
-  double fractional_second =
-      std::stoi(timestamp.substr(20, timestamp.length() - 20));
+  double fractional_second = std::stod("0." + timestamp.substr(20));
 
   // Accumulate days
   int month_days[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-  if ((year % 4 == 0) && (year % 100 != 0 || year % 400 == 0))
+  if ((full_year % 4 == 0) && (full_year % 100 != 0 || full_year % 400 == 0))
     month_days[1] = 29; // Leap year
 
-  double days = day;
-  for (int m = 0; m < month; m++)
-    days += month_days[m];
+  double day_of_year = day;
+  for (int m = 0; m < month - 1; m++)
+    day_of_year += month_days[m];
 
   // Add the day fraction
-  double total_seconds =
+  double elapsed_seconds =
       hour * 3600.0 + minute * 60.0 + second + fractional_second;
-  return days + total_seconds / 86400.0;
+  return day_of_year + elapsed_seconds / DAY_SECONDS;
 }
 
-std::vector<Satellite> read_satellite_data(const char *csv_path) {
-  std::ifstream file(csv_path);
+// Calculate the Greenwich Mean Sidereal Time, which is the angle between
+// vernal equinox and the Earth's prime meridean, in radians.
+double gmst_time(perturb::JulianDate date) {
+  double full_date = date.jd + date.jd_frac;
+
+  // Julian centuries since the J2000 epoch
+  double jc = (full_date - 2451545.0) / 36525.0;
+
+  // Calculate GMST in seconds using the IAU 1982 polynomial formula
+  double seconds = 67310.54841 + (876600.0 * 3600.0 + 8640184.812866) * jc +
+                   0.093104 * jc * jc - 6.2e-6 * jc * jc * jc;
+
+  // Convert to radians [0, 2π]
+  double radians = (seconds * 2.0 * M_PI) / DAY_SECONDS;
+  double normalized = std::fmod(radians, (2.0 * M_PI));
+  return normalized < 0.0 ? normalized + 2.0 * M_PI : normalized;
+}
+
+// Convert a position in the TEME reference from to the ITRS reference frame
+// since positions in the TEME reference frame are tied to Earth's orientation
+// in space at a specific time and do not rotate with the Earth.
+glm::vec3 teme_to_itrs(glm::vec3 position, perturb::JulianDate date) {
+  double angle = gmst_time(date);
+  // Rotates vectors in the XY plane about the Z axis
+  double sin_a = std::sin(angle), cos_a = std::cos(angle);
+  glm::mat3 rotation =
+      glm::mat3(cos_a, -sin_a, 0.0, sin_a, cos_a, 0.0, 0.0, 0.0, 1.0);
+  return rotation * position;
+}
+
+void Constellation::set_current_time() {
+  // Set the current julian date
+  auto now = std::chrono::system_clock::now();
+  auto tt = std::chrono::system_clock::to_time_t(now);
+  auto utc_time = *gmtime(&tt);
+  auto time = perturb::DateTime{
+      utc_time.tm_year + 1900, utc_time.tm_mon + 1, utc_time.tm_mday,
+      utc_time.tm_hour,        utc_time.tm_min,     (double)utc_time.tm_sec};
+  date = perturb::JulianDate(time);
+}
+
+void Constellation::propagate(double step_seconds, double earth_scale,
+                              std::vector<InstanceData> &instances) {
+  if (instances.size() != satellites.size())
+    THROW_ERROR("Output buffer size mismatch");
+
+  date += (step_seconds / DAY_SECONDS);
+  for (size_t i = 0; i < satellites.size(); i++) {
+    perturb::StateVector s;
+    handle_error(satellites[i].model.propagate(date, s));
+
+    glm::vec3 position = glm::vec3(s.position[0], s.position[1], s.position[2]);
+    position = teme_to_itrs(position, date);
+    // Scale kilometers to on screen coordinates by dividing by the Earth's radius
+    position *= earth_scale / 6371.0;
+
+    // Since the position is in the ITRS reference frame, and Earth is centered
+    // at the origin, positions can directly be mapped to on screen positions
+    glm::mat4 scale = glm::scale(glm::mat4(1.0), glm::vec3(0.01, 0.01, 0.01));
+    glm::mat4 translate = glm::translate(glm::mat4(1.0), position);
+
+    instances[i].model_matrix = translate * scale;
+    instances[i].color = glm::vec4(0.0, 1.0, 0.0, 1.0);
+  }
+}
+
+int Constellation::load_satellite_data(std::string csv_path) {
+  std::ifstream file(csv_path.c_str());
   if (!file.good() || !file.is_open())
     THROW_ERROR("Failed to open {}", csv_path);
 
-  std::vector<Satellite> satellites;
-
   bool column_line = true;
   std::string line = "";
+  satellites.clear();
+
   while (std::getline(file, line)) {
     if (column_line) {
       column_line = false;
@@ -81,6 +144,8 @@ std::vector<Satellite> read_satellite_data(const char *csv_path) {
     std::string name = "", id = "";
     size_t current = 0, column = 0;
 
+    // NOTE: the comma seperated values are expected to be in the order that
+    // Celestrak defines
     while (current < line.length()) {
       size_t next = std::min(line.find(",", current), line.length());
       std::string str = line.substr(current, next - current);
@@ -107,12 +172,10 @@ std::vector<Satellite> read_satellite_data(const char *csv_path) {
         case 9: info.ephemeris_type = std::stol(str); break;
         case 10: info.classification = str[0]; break;
         case 11: {
-          info.catalog_number[0] = str[0];
-          info.catalog_number[1] = str[1];
-          info.catalog_number[2] = str[2];
-          info.catalog_number[3] = str[3];
-          info.catalog_number[4] = str[4];
-          info.catalog_number[5] = str.length() == 6 ? str[5] : ' ';
+          std::memset(info.catalog_number, ' ', 6);
+          for (size_t i = 0; i < str.length(); i++) {
+            info.catalog_number[i] = str[i];
+          }
           break;
         }
         case 12: info.element_set_number = std::stoi(str); break;
@@ -124,9 +187,11 @@ std::vector<Satellite> read_satellite_data(const char *csv_path) {
       // clang-format on
     }
 
-    satellites.push_back(Satellite(name, id, info));
+    auto model = perturb::Satellite(info);
+    handle_error(model.last_error());
+    satellites.push_back({name, id, model});
   }
 
   file.close();
-  return satellites;
+  return satellites.size();
 }
