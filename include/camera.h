@@ -11,6 +11,7 @@ public:
   void move_vertically(bool up);
   void zoom(bool inwards);
   glm::mat4 view_matrix();
+  glm::vec3 get_position();
 
 private:
   glm::vec3 position;

@@ -7,8 +7,8 @@
 
 Texture::~Texture() { glDeleteTextures(1, &id); }
 
-void Texture::use() {
-  glActiveTexture(GL_TEXTURE0);
+void Texture::use(int unit) {
+  glActiveTexture(GL_TEXTURE0 + unit);
   glBindTexture(obj, id);
 }
 
@@ -35,10 +35,14 @@ void Texture::init(std::vector<std::string> paths) {
     int width = 0, height = 0, channels = 0;
     unsigned char *pixels =
         stbi_load(paths[i].c_str(), &width, &height, &channels, 3);
-    if (pixels == nullptr || channels != 3)
+    if (pixels == nullptr)
       THROW_ERROR("Failed to load {}", paths[i]);
 
-    glTexImage2D(bind_obj + i, 0, GL_RGB, width, height, 0, GL_RGB,
+    int internal = channels == 1   ? GL_R16F
+                   : channels == 4 ? GL_RGBA16F
+                                   : GL_RGB16F;
+    int pixel = channels == 1 ? GL_RED : channels == 4 ? GL_RGBA : GL_RGB;
+    glTexImage2D(bind_obj + i, 0, internal, width, height, 0, pixel,
                  GL_UNSIGNED_BYTE, pixels);
     stbi_image_free(pixels);
   }

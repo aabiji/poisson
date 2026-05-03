@@ -102,22 +102,25 @@ void Visualizer::init_scene_objects() {
        "../assets/textures/cubemap/py.png", "../assets/textures/cubemap/ny.png",
        "../assets/textures/cubemap/pz.png",
        "../assets/textures/cubemap/nz.png"});
-  earth_texture.init({"../assets/textures/earth/daymap.jpg"});
+  earth_texture.init({"../assets/textures/earth/day.jpg"});
+  earth_normal_map.init({"../assets/textures/earth/normal.png"});
+  earth_specular_map.init({"../assets/textures/earth/specular.png"});
 
   circles = create_circle_mesh(10);
   globe = create_unit_sphere(32, 32);
   skybox.init();
 
   earth_scale = 2.0;
-  globe_instances.push_back(InstanceData(
-      glm::scale(glm::mat4(1.0), glm::vec3(earth_scale)), glm::vec4(0.0)));
+  constellation_time_step = 1; // Propagate every 1 second
+  sun_pos = glm::vec3((1.0 / 6371.0) * 149600000.0, 0.0, 0.0);
+
+  globe_instances.push_back(
+      InstanceData(glm::vec4(0.0), glm::vec3(earth_scale)));
 
   int size = constellation.load_satellite_data("../assets/starlink.csv");
   circle_instances.resize(size);
-
   constellation.set_current_time();
   constellation.propagate(0, earth_scale, circle_instances);
-  constellation_time_step = 1; // Propagate every 1 second
 }
 
 void Visualizer::run() {
@@ -152,11 +155,18 @@ void Visualizer::render_scene() {
   glm::mat4 v_no_translation = glm::mat4(glm::mat3(v));
 
   main_shader.use();
-  main_shader.set<glm::mat4>("projection", state.projection);
   main_shader.set<glm::mat4>("view", v);
-
-  earth_texture.use();
+  main_shader.set<glm::mat4>("projection", state.projection);
+  main_shader.set<glm::vec3>("view_pos", camera.get_position());
+  main_shader.set<glm::vec3>("sun_pos", sun_pos);
+  main_shader.set<int>("planet_texture", 0);
+  main_shader.set<int>("planet_normal_map", 1);
+  main_shader.set<int>("planet_specular_map", 2);
   main_shader.set<bool>("use_texture", true);
+
+  earth_texture.use(0);
+  earth_normal_map.use(1);
+  earth_specular_map.use(2);
   globe.render(globe_instances);
 
   main_shader.set<bool>("use_texture", false);
@@ -167,7 +177,7 @@ void Visualizer::render_scene() {
   cubemap_shader.set<glm::mat4>("projection", state.projection);
   cubemap_shader.set<glm::mat4>("view", v_no_translation);
   glDepthFunc(GL_LEQUAL);
-  cubemap_texture.use();
+  cubemap_texture.use(0);
   skybox.render();
   glDepthFunc(GL_LESS);
 }

@@ -15,15 +15,16 @@ struct alignas(16) Vertex {
   glm::vec3 position;
   glm::vec2 uv;
   glm::vec3 normal;
+  glm::vec4 tangent;
 };
 
 // NOTE: See vertex.glsl
 struct alignas(16) InstanceData {
   glm::mat4 model_matrix;
+  glm::mat4 normal_matrix;
   glm::vec4 color;
   int is_2d;
-  InstanceData(glm::mat4 m, glm::vec4 c)
-      : model_matrix(m), color(c), is_2d(false) {}
+  InstanceData(glm::vec3 position, glm::vec3 scale);
   InstanceData() {}
 };
 

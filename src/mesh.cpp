@@ -50,6 +50,15 @@ void Skybox::render() {
   glDrawArrays(GL_TRIANGLES, 0, 36);
 }
 
+InstanceData::InstanceData(glm::vec3 position, glm::vec3 scale) {
+  glm::mat4 scale_mat = glm::scale(glm::mat4(1.0), scale);
+  glm::mat4 translate = glm::translate(glm::mat4(1.0), position);
+  model_matrix = translate * scale_mat;
+  normal_matrix = glm::transpose(glm::inverse(model_matrix));
+  color = glm::vec4(1.0, 1.0, 1.0, 1.0);
+  is_2d = false;
+}
+
 InstancedMesh::InstancedMesh() : initialized(false) {}
 
 InstancedMesh::InstancedMesh(InstancedMesh &&other) noexcept {
@@ -112,6 +121,10 @@ InstancedMesh::InstancedMesh(std::vector<Vertex> vertices,
   glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                         (void *)offsetof(Vertex, normal));
   glEnableVertexAttribArray(2);
+
+  glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                        (void *)offsetof(Vertex, tangent));
+  glEnableVertexAttribArray(3);
 }
 
 InstancedMesh::~InstancedMesh() {
@@ -140,6 +153,49 @@ void InstancedMesh::render(std::vector<InstanceData> &data) {
                           data.size());
 }
 
+void compute_tangents(std::vector<Vertex> &vertices,
+                      std::vector<unsigned int> &indices) {
+  // Compute tangent and bitangent vectors
+  std::vector<glm::vec3> tangents(vertices.size());
+  std::vector<glm::vec3> bitangents(vertices.size());
+
+  for (size_t i = 0; i < indices.size(); i += 3) {
+    int i0 = indices[i], i1 = indices[i + 1], i2 = indices[i + 2];
+    Vertex v0 = vertices[i0], v1 = vertices[i1], v2 = vertices[i2];
+
+    glm::vec3 delta_pos0 = v1.position - v0.position;
+    glm::vec3 delta_pos1 = v2.position - v0.position;
+    glm::vec2 delta_uv0 = v1.uv - v0.uv;
+    glm::vec2 delta_uv1 = v2.uv - v0.uv;
+
+    // Inverting the mapping from UV space to world space
+    float determinant = delta_uv0.x * delta_uv1.y - delta_uv0.y * delta_uv1.x;
+    if (std::fabs(determinant) < 1e-8f)
+      continue; // Ignore degenerate UVs
+    glm::vec3 t = (delta_pos0 * delta_uv1.y - delta_pos1 * delta_uv0.y) *
+                  (1.0f / determinant);
+    glm::vec3 b = (delta_pos1 * delta_uv0.x - delta_pos0 * delta_uv1.x) *
+                  (1.0f / determinant);
+
+    // Accumulate contributions from each triangle
+    tangents[i0] += t;
+    tangents[i1] += t;
+    tangents[i2] += t;
+    bitangents[i0] += b;
+    bitangents[i1] += b;
+    bitangents[i2] += b;
+  }
+
+  // Use the accumulated contributions
+  for (size_t i = 0; i < vertices.size(); i++) {
+    glm::vec3 N = vertices[i].position;
+    glm::vec3 T = glm::normalize(tangents[i]);
+    glm::vec3 B = glm::normalize(bitangents[i]);
+    float handedness = (dot(cross(N, T), B) < 0.0f) ? -1.0f : 1.0f;
+    vertices[i].tangent = glm::vec4(T, handedness);
+  }
+}
+
 InstancedMesh create_unit_sphere(int longitudes, int lattitudes) {
   std::vector<Vertex> vertices;
   std::vector<unsigned int> indices;
@@ -160,7 +216,6 @@ InstancedMesh create_unit_sphere(int longitudes, int lattitudes) {
       v.uv = glm::vec2((float)j / (float)longitudes,
                        1.0 - (float)i / (float)lattitudes);
       v.normal = v.position;
-
       vertices.push_back(v);
     }
   }
@@ -185,6 +240,7 @@ InstancedMesh create_unit_sphere(int longitudes, int lattitudes) {
     }
   }
 
+  compute_tangents(vertices, indices);
   return InstancedMesh(vertices, indices);
 }
 
@@ -193,7 +249,6 @@ InstancedMesh create_circle_mesh(int num_fans) {
   std::vector<unsigned int> indices;
 
   Vertex v;
-  v.uv = v.normal = glm::vec3(0.0, 0.0, 0.0);
   v.position = glm::vec3(0.0, 0.0, 0.0);
   vertices.push_back(v);
 
@@ -201,7 +256,6 @@ InstancedMesh create_circle_mesh(int num_fans) {
     Vertex v;
     float angle = i * ((2.0 * M_PI) / (float)num_fans);
     v.position = glm::vec3(std::cos(angle), std::sin(angle), 0);
-    v.uv = v.normal = glm::vec3(0.0, 0.0, 0.0);
     vertices.push_back(v);
   }
 

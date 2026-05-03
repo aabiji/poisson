@@ -7,6 +7,7 @@
 #include <perturb/tle.hpp>
 
 #include "debug.h"
+#include "mesh.h"
 #include "satellite.h"
 
 const double DAY_SECONDS = 86400.0;
@@ -119,10 +120,7 @@ void Constellation::propagate(double step_seconds, double earth_scale,
 
     // Since the position is in the ITRS reference frame, and Earth is centered
     // at the origin, positions can directly be mapped to on screen positions
-    glm::mat4 scale = glm::scale(glm::mat4(1.0), glm::vec3(0.01, 0.01, 0.01));
-    glm::mat4 translate = glm::translate(glm::mat4(1.0), position);
-
-    instances[i].model_matrix = translate * scale;
+    instances[i] = InstanceData(position, glm::vec3(0.01, 0.01, 0.01));
     instances[i].color = glm::vec4(0.0, 1.0, 0.0, 1.0);
     instances[i].is_2d = true;
   }

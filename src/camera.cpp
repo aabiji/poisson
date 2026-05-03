@@ -41,6 +41,8 @@ void Camera::move_vertically(bool up) {
   position.y = glm::clamp(position.y + (up ? 0.1 : -0.1), -5.0, 5.0);
 }
 
+glm::vec3 Camera::get_position() { return position; }
+
 glm::mat4 Camera::view_matrix() {
   // Orbit the camera around the origin, while preserving some free rotation
   glm::vec3 world_up = glm::vec3(0.0, 1.0, 0.0);

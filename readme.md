@@ -4,8 +4,8 @@ Inspirations:
 - https://orbital-watch-pink.vercel.app/
 - https://www.jack-huston.com/TLE-Satellite-Plotter/
 
-- Add basic phong lighting on the gloe
-  - Use the normal map and the specular map textures (use a normal matrix)
+- The earth should be tilted and should rotate over time
+- Render clouds on the globe
 - Propagate satellites on a seperate thread
 - Decide whether to use the daymap or the nightmap based off of the simulated time (current user time?)
   Get starting position, then always propagate one timestamp into the future. Then just interpolate the position during the timestamp
@@ -37,16 +37,15 @@ Inspirations:
 
 ---
 
+- [Billboards](https://www.opengl-tutorial.org/intermediate-tutorials/billboards-particles/billboards/)
+- [Normal mapping](https://www.opengl-tutorial.org/intermediate-tutorials/tutorial-13-normal-mapping/)
 - [Coordinate reference frames](https://github.com/horizonanalytic/astrora/blob/main/src/coordinates/frames.rs)
-- [Reference frames and coordinate systems](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/Tutorials/pdf/individual_docs/17_frames_and_coordinate_systems.pdf)
 - [Cubemaps](https://learnopengl.com/Advanced-OpenGL/Cubemaps)
 - [Shader storage buffer objects](https://ktstephano.github.io/rendering/opengl/ssbos)
 - [Creating an icosphere mesh in code](http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html)
 - [Sphere.cpp](https://gist.github.com/Pikachuxxxx/5c4c490a7d7679824e0e18af42918efc)
 - [Planetary Orbits](https://science.nasa.gov/learn/basics-of-space-flight/chapter5-1/)
 - [Supplemental GP Element Sets](https://celestrak.org/NORAD/elements/supplemental/index.php?FORMAT=csv)
-- [United States Space Command](https://en.wikipedia.org/wiki/United_States_Space_Command)
-- [United States Space Surveillance Network](https://en.wikipedia.org/wiki/United_States_Space_Surveillance_Network)
 - [Satellite drag](https://www.swpc.noaa.gov/impacts/satellite-drag)
 - [SPACETRACK REPORT NO. 3](https://celestrak.org/NORAD/documentation/spacetrk.pdf)
 - [Revisiting Spacetrack Report #3: Rev 2](https://celestrak.org/publications/AIAA/2006-6753/AIAA-2006-6753-Rev2.pdf)

@@ -46,7 +46,9 @@ private:
 
   std::vector<InstanceData> globe_instances;
   std::vector<InstanceData> circle_instances;
-  double earth_scale, constellation_time_step;
+  double earth_scale;
+  double constellation_time_step;
+  glm::vec3 sun_pos;
 
   Camera camera;
   Shader main_shader;
@@ -54,6 +56,8 @@ private:
   Skybox skybox;
   Texture cubemap_texture;
   Texture earth_texture;
+  Texture earth_normal_map;
+  Texture earth_specular_map;
   InstancedMesh globe;
   InstancedMesh circles;
   Constellation constellation;

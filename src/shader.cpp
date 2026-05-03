@@ -60,6 +60,9 @@ template <typename T> void Shader::set(const char *name, T value) {
   if constexpr (std::is_same_v<T, bool>)
     glUniform1i(location, value);
 
+  if constexpr (std::is_same_v<T, int>)
+    glUniform1i(location, value);
+
   if constexpr (std::is_same_v<T, glm::vec3>)
     glUniform3fv(location, 1, glm::value_ptr(value));
 
@@ -71,3 +74,4 @@ template <typename T> void Shader::set(const char *name, T value) {
 template void Shader::set<glm::vec3>(const char *, glm::vec3);
 template void Shader::set<glm::mat4>(const char *, glm::mat4);
 template void Shader::set<bool>(const char *, bool);
+template void Shader::set<int>(const char *, int);

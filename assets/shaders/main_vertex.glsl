@@ -3,17 +3,19 @@
 layout(location = 0) in vec3 in_pos;
 layout(location = 1) in vec2 in_uv;
 layout(location = 2) in vec3 in_normal;
+layout(location = 3) in vec4 in_tangent; // xyz=tangent, w=handedness
 
 uniform mat4 view;
 uniform mat4 projection;
 
 out vec2 texture_coords;
-out vec3 normal;
 out vec4 obj_color;
-out vec3 obj_position;
+out vec3 obj_pos;
+out mat3 tbn_matrix;
 
 struct InstanceData {
     mat4 model_matrix;
+    mat4 normal_matrix;
     vec4 color;
     int is_2d;
 };
@@ -34,14 +36,23 @@ void main() {
 
         view_pos.xy += in_pos.xy * size;
         gl_Position = projection * view_pos;
-        obj_position = world_pos;
+        obj_pos = world_pos;
     } else {
         vec4 p = d.model_matrix * vec4(in_pos, 1.0);
         gl_Position = projection * view * p;
-        obj_position = vec3(p);
+        obj_pos = vec3(p);
     }
+
+    // First map the vectors from object space to world space, then compute a
+    // matrix to map from tangent space (surface of the object) to world space
+    mat3 nm = mat3(d.normal_matrix);
+    vec3 N = normalize(nm * in_normal);
+    vec3 T = normalize(nm * in_tangent.xyz);
+    // Make sure the vectors are perpendicular to the normal
+    T = normalize(T - N * dot(T, N));
+    vec3 B = cross(N, T) * in_tangent.w;
+    tbn_matrix = mat3(T, B, N);
 
     obj_color = d.color;
     texture_coords = in_uv;
-    normal = in_normal;
 }
